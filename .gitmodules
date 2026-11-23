@@ -1,0 +1,6 @@
+[submodule "frontend"]
+	path = frontend
+	url = https://github.com/Cloud-Computing-Taller2/frontend
+[submodule "backend"]
+	path = backend
+	url = https://github.com/Cloud-Computing-Taller2/backend
