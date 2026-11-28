@@ -42,6 +42,10 @@ awslocal s3 ls && awslocal sqs list-queues && awslocal iam list-users
 terraform -chdir=infra plan -detailed-exitcode
 ```
 
+## CI
+
+The superproject workflow (`.github/workflows/ci.yml`) checks out both submodules and runs lint, unit tests, E2E, dependency audit and build. The E2E job starts PostgreSQL and LocalStack, applies Terraform and enables D's retry/DLQ suite with `UPLOADS_E2E=1`. Each submodule repo also has its own workflow so direct pushes there are checked: `backend` on `infra/compose-support`, `frontend` on `infra/ci`; this repo records those commits as gitlinks.
+
 ## Notes
 
 - IAM policy is least privilege; `sqs:ChangeMessageVisibility` is required by the worker retries and DLQ redrive.
