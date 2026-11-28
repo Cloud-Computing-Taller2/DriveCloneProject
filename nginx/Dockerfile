@@ -14,5 +14,5 @@ RUN printf "/// <reference path='./dist/vite/client.d.ts' />\n" > node_modules/v
 RUN pnpm run build
 
 FROM nginx:alpine
-COPY nginx.conf /etc/nginx/nginx.conf
+COPY nginx/nginx.conf /etc/nginx/nginx.conf
 COPY --from=build /app/dist /usr/share/nginx/html
