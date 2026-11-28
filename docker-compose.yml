@@ -100,8 +100,8 @@ services:
     environment:
       SERVICES: s3,sqs,iam
       AWS_DEFAULT_REGION: ${AWS_REGION:-us-east-1}
-      # Terraform then emits http://localhost:4566/<account>/<queue> URLs.
-      SQS_ENDPOINT_STRATEGY: path
+      # 'path' emits /queue/<region>/... URLs that AWS provider 6.x rejects; 'off' is AWS-shaped.
+      SQS_ENDPOINT_STRATEGY: off
       PERSISTENCE: "1"
     volumes:
       - localstack_data:/var/lib/localstack
