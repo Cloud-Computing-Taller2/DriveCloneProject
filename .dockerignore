@@ -1,0 +1,8 @@
+**/node_modules
+**/.git
+**/dist
+infra/.terraform
+infra/*.tfstate
+infra/*.tfstate.*
+.env
+plan.md
