@@ -1,5 +1,7 @@
 FROM node:26-alpine AS build
 
+# The frontend's prepare script runs `vp config`, which needs git.
+RUN apk add --no-cache git
 RUN npm install --global pnpm@12
 WORKDIR /app
 
