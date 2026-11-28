@@ -21,7 +21,7 @@ variable "queue_name" {
 
 variable "frontend_origins" {
   type    = list(string)
-  default = ["http://localhost", "http://localhost:80", "http://localhost:5173"]
+  default = ["http://localhost", "http://localhost:80", "http://localhost:8080", "http://localhost:5173"]
 }
 
 # Cloudflare Tunnel hostname for presigned-URL CORS; empty until the demo.

@@ -17,7 +17,7 @@ cd infra && terraform init && terraform apply -auto-approve && cd ..
 docker compose up -d --build --wait
 ```
 
-React is at `http://localhost`, API at `http://localhost/api/health`.
+React is at `http://localhost`, API at `http://localhost/api/health`. With rootless Docker set `HTTP_PORT=8080` in `.env` and use `http://localhost:8080`.
 Demo users: `alice`, `bob`, `carol` (see `db/migrations/002_seed.sql`; confirm the bcrypt password with C before the demo).
 
 Terraform runs from the host against `http://localhost:4566`; API and worker reach LocalStack via `http://localstack:4566`. Presigned URLs for the browser are signed with `S3_PUBLIC_ENDPOINT` (`SQS_ENDPOINT_STRATEGY=path` keeps queue URLs browser-resolvable).
