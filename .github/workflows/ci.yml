@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: backend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec eslint "{src,test}/**/*.ts"
+      - run: pnpm test
+      - run: pnpm audit --audit-level=high
+      - run: pnpm run build
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec vp check
+      - run: pnpm audit --audit-level=high
+      # shortcut: vite-plus has no Node10-resolvable vite/client type entry.
+      - run: printf "/// <reference path='./dist/vite/client.d.ts' />\n" > node_modules/vite/client.d.ts
+      - run: pnpm run build
+
+  infra:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform -chdir=infra fmt -check
+      - run: terraform -chdir=infra init -backend=false
+      - run: terraform -chdir=infra validate
+      - run: cp .env.example .env
+      - run: docker compose config
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: [backend, infra]
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: backend/pnpm-lock.yaml
+      - uses: hashicorp/setup-terraform@v3
+      - run: pnpm install --frozen-lockfile
+      - name: Start PostgreSQL and LocalStack
+        working-directory: .
+        run: docker compose up -d db localstack --wait
+      - name: Apply Terraform
+        working-directory: .
+        run: |
+          terraform -chdir=infra init
+          terraform -chdir=infra apply -auto-approve
+          {
+            echo "DATABASE_URL=postgres://drive:drive@localhost:5432/driveclone"
+            echo "AWS_ENDPOINT_URL=http://localhost:4566"
+            echo "S3_BUCKET_NAME=$(terraform -chdir=infra output -raw s3_bucket_name)"
+            echo "SQS_QUEUE_URL=$(terraform -chdir=infra output -raw sqs_queue_url)"
+            echo "SQS_DLQ_URL=$(terraform -chdir=infra output -raw sqs_dlq_url)"
+          } >> "$GITHUB_ENV"
+      - name: Uploads, retries and DLQ
+        env:
+          UPLOADS_E2E: "1"
+          ALLOW_DEV_AUTH: "true"
+          AWS_REGION: us-east-1
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+        run: pnpm test:e2e
+      - name: Logs on failure
+        if: failure()
+        working-directory: .
+        run: docker compose logs --tail=100
