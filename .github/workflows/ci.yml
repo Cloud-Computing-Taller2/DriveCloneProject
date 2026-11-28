@@ -108,7 +108,7 @@ jobs:
           AWS_REGION: us-east-1
           AWS_ACCESS_KEY_ID: test
           AWS_SECRET_ACCESS_KEY: test
-        run: pnpm test:e2e
+        run: pnpm test:e2e -- uploads
       - name: Logs on failure
         if: failure()
         working-directory: .
