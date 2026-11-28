@@ -48,12 +48,21 @@ Entregar `docker compose up` + `terraform apply` funcionando con NGINX, API, wor
 - `curl localhost/` sirve React; `curl localhost/api/health` → `{"status":"ok"}`; 6 `POST /api/auth/login` rápidos → 429; upload > 50 MB → 413.
 - `awslocal s3 ls`, `awslocal sqs list-queues`, `awslocal iam list-users`; `terraform plan` sin diff y outputs no vacíos.
 - `psql` (o `docker compose exec db psql`): 4 tablas, constraints y `setval` correcto; 3 usuarios / 6 carpetas / 5 archivos / 4 shares.
-- `UPLOADS_E2E=1 pnpm test:e2e` en `backend`: pasa el caso de 3 reintentos y mensaje en la DLQ.
+- `UPLOADS_E2E=1 pnpm test:e2e -- uploads` en `backend`: pasa el caso de 3 reintentos y mensaje en la DLQ (en CI; localmente el `node_modules` de este checkout está corrupto y `app.e2e-spec.ts` falla al cargar `@nestjs/config` como ESM).
 - CI completa: lint → tests → E2E → audit → build, tanto en el superproyecto como en los submódulos.
+
+## Validation (2026-11-28)
+
+- `docker compose up -d --build --wait`: los 5 servicios healthy. Correcciones necesarias durante el build: instalar `git` para el hook `prepare` de Vite+, copiar `nginx.conf` desde la raíz del contexto, publicar el puerto de host como `${HTTP_PORT:-80}` (Docker rootless no puede enlazar 80) y escuchar también en IPv6 en NGINX.
+- `terraform apply`: 8 recursos creados; cola con `maxReceiveCount=3`, visibility 30 s y bucket privado con CORS. `terraform plan -detailed-exitcode` → 0 (sin diff).
+- HTTP: `/` → 200, `/api/health` → `{"status":"ok"}`, rate limit de login → 429 tras 5 req, upload de 51 MB → 413.
+- Flujo real de carga: `POST /api/files?folderId=2` → 202 `queued`; el worker la dejó `ready` y el objeto apareció en S3 con clave `users/1/folders/2/<uuid>-manual-upload.png`.
+- Seed: 3 usuarios / 6 carpetas / 5 archivos / 4 shares. El hash bcrypt original no coincidía con `Password123!`; se regeneró a cost 10.
+- No se ejecutó la suite Jest de uploads en este host (dependencias corruptas); queda cubierta por el job E2E de CI.
 
 ## Open Questions
 
-- Confirmar con C si el hash bcrypt del seed corresponde a `Password123!`; si no, regenerarlo antes de la demo.
+- Verificado: el hash original del seed no coincidía con `Password123!`; se regeneró a cost 10 en `002_seed.sql` (tanto en el repo backend como en el superproyecto).
 - Hostname definitivo del Cloudflare Tunnel para `public_app_origin` / CORS (se puede dejar `null` hasta la demo).
 - Sincronizar con B/C/D el push desde los clones independientes y los bumps de gitlinks; no pisar la rama de D ni hacer commits dentro de los submódulos de `DriveCloneProject/`.
 - `pnpm audit --audit-level=high` puede reportar vulnerabilidades base en dependencias; decidir si se aplica un allowlist documentado en vez de actualizar dependencias ajenas.
