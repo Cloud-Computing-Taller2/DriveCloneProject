@@ -1,0 +1,117 @@
+name: driveclone
+
+x-app-env: &app-env
+  PORT: 3000
+  DATABASE_URL: postgres://drive:drive@db:5432/driveclone
+  AWS_REGION: ${AWS_REGION:-us-east-1}
+  AWS_ENDPOINT_URL: http://localstack:4566
+  S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:4566}
+  S3_BUCKET_NAME: ${S3_BUCKET_NAME:-driveclone-storage}
+  SQS_QUEUE_URL: ${SQS_QUEUE_URL:-http://localstack:4566/000000000000/driveclone-jobs}
+  SQS_DLQ_URL: ${SQS_DLQ_URL:-http://localstack:4566/000000000000/driveclone-jobs-dlq}
+  UPLOAD_TMP_DIR: /data/uploads
+  MAX_UPLOAD_BYTES: 52428800
+  ALLOW_DEV_AUTH: ${ALLOW_DEV_AUTH:-false}
+
+services:
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build: &backend-build
+      context: ./backend
+      dockerfile: DockerFile
+    image: driveclone-backend:local
+    restart: unless-stopped
+    env_file: .env
+    environment: *app-env
+    volumes:
+      - uploads_data:/data/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  worker:
+    build: *backend-build
+    image: driveclone-backend:local
+    restart: unless-stopped
+    command: ["node", "dist/worker.js"]
+    env_file: .env
+    environment:
+      <<: *app-env
+      PORT: 3001
+      WORKER_PORT: 3001
+    volumes:
+      - uploads_data:/data/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: driveclone
+      POSTGRES_USER: drive
+      POSTGRES_PASSWORD: drive
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U drive -d driveclone"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  localstack:
+    image: localstack/localstack:3
+    restart: unless-stopped
+    ports:
+      - "4566:4566"
+    environment:
+      SERVICES: s3,sqs,iam
+      AWS_DEFAULT_REGION: ${AWS_REGION:-us-east-1}
+      # Terraform then emits http://localhost:4566/<account>/<queue> URLs.
+      SQS_ENDPOINT_STRATEGY: path
+      PERSISTENCE: "1"
+    volumes:
+      - localstack_data:/var/lib/localstack
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  db_data:
+  localstack_data:
+  uploads_data:
